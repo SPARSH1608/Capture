@@ -1,12 +1,15 @@
 import PlayerHUD from '@/components/PlayerHUD';
-import { getHexIndex } from '@/services/h3Service';
+import { getHexBoundary, getHexIndex, getNeighbours } from '@/services/h3Service';
 import { requestLocationPermission, startLocationTracking } from '@/services/locationService';
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Polygon } from 'react-native-maps';
 const MapScreen = () => {
     const [location, setLocation] = useState<any>(null)
     const mapRef = useRef<MapView>(null)
+    const [currentHex, setCurrentHex] = useState(null)
+    const [visitedHexes, setVisitedHexes] = useState<Set<string>>(new Set())
+    const [hexes, setHexes] = useState<any>([])
     useEffect(() => {
 
         let subscription: any;
@@ -15,13 +18,28 @@ const MapScreen = () => {
             await requestLocationPermission()
             subscription = await startLocationTracking((coords) => {
                 setLocation(coords)
+
                 const hex = getHexIndex(coords.latitude, coords.longitude)
+                if (hex != currentHex) {
+                    console.log("Entered new hex:", hex)
+                    setCurrentHex(hex)
+                    setVisitedHexes(prev => {
+                        const updated = new Set(prev)
+                        updated.add(hex)
+                        return updated
+                    })
+                    const neighbours = getNeighbours(hex)
+                    setHexes(neighbours)
+                }
                 console.log('hex', hex)
+                // const neighbours = getNeighbours(hex)
+                // setHexes(neighbours)
+                console.log('hexes', hexes)
                 mapRef.current?.animateToRegion({
                     latitude: coords.latitude,
                     longitude: coords.longitude,
-                    latitudeDelta: 0.01,
-                    longitudeDelta: 0.01
+                    latitudeDelta: 0.00001,
+                    longitudeDelta: 0.00001
                 })
             })
 
@@ -70,14 +88,36 @@ const MapScreen = () => {
                 style={styles.map}
             >
 
-                {location && (
+                {/* {location && (
                     <Marker coordinate={{
                         latitude: location.latitude,
                         longitude: location.longitude
                     }}
                         title='You are here'
                     />
-                )}
+                )} */}
+                {hexes.map((hex) => {
+
+                    const isPlayerHex = hex === currentHex
+                    const isVisited = visitedHexes.has(hex)
+
+                    return (
+                        <Polygon
+                            key={hex}
+                            coordinates={getHexBoundary(hex)}
+                            strokeColor={isPlayerHex ? "#2196F3" : "#4CAF50"}
+                            fillColor={
+                                isPlayerHex
+                                    ? "rgba(33,150,243,0.4)"
+                                    : isVisited
+                                        ? "rgba(255,193,7,0.3)"
+                                        : "rgba(76,175,80,0.15)"
+                            }
+                            strokeWidth={2}
+                        />
+                    )
+
+                })}
             </MapView>
 
 
