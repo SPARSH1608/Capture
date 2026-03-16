@@ -1,101 +1,157 @@
-import PlayerHUD from '@/components/PlayerHUD';
-import { getHexBoundary, getHexIndex, getNeighbours } from '@/services/h3Service';
-import { requestLocationPermission, startLocationTracking } from '@/services/locationService';
-import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import MapView, { Polygon } from 'react-native-maps';
+import PlayerHUD from "@/components/PlayerHUD"
+import { getHexBoundary, getHexIndex, getNeighbours } from "@/services/h3Service"
+import { requestLocationPermission, startLocationTracking } from "@/services/locationService"
+import { distanceMeters } from "@/utils/distance"
+import React, { useEffect, useRef, useState } from "react"
+import { StyleSheet, View } from "react-native"
+import MapView, { Polygon, Polyline } from "react-native-maps"
+
 const MapScreen = () => {
-    const [location, setLocation] = useState<any>(null)
+
     const mapRef = useRef<MapView>(null)
-    const [currentHex, setCurrentHex] = useState(null)
+
+    const prevLocationRef = useRef<any>(null)
+    const currentHexRef = useRef<string | null>(null)
+
+    const [location, setLocation] = useState<any>(null)
+    const [hexes, setHexes] = useState<string[]>([])
+    const [currentHex, setCurrentHex] = useState<string | null>(null)
     const [visitedHexes, setVisitedHexes] = useState<Set<string>>(new Set())
-    const [hexes, setHexes] = useState<any>([])
+
+    const [distance, setDistance] = useState(0)
+    const [timeInHex, setTimeInHex] = useState(0)
+
+    const [trail, setTrail] = useState<
+        { latitude: number; longitude: number }[]
+    >([])
+
+
     useEffect(() => {
 
-        let subscription: any;
+        let subscription: any
 
         async function startTracking() {
-            await requestLocationPermission()
-            subscription = await startLocationTracking((coords) => {
-                setLocation(coords)
 
-                const hex = getHexIndex(coords.latitude, coords.longitude)
-                if (hex != currentHex) {
-                    console.log("Entered new hex:", hex)
-                    setCurrentHex(hex)
-                    setVisitedHexes(prev => {
-                        const updated = new Set(prev)
-                        updated.add(hex)
-                        return updated
-                    })
-                    const neighbours = getNeighbours(hex)
-                    setHexes(neighbours)
-                }
-                console.log('hex', hex)
-                // const neighbours = getNeighbours(hex)
-                // setHexes(neighbours)
-                console.log('hexes', hexes)
-                mapRef.current?.animateToRegion({
-                    latitude: coords.latitude,
-                    longitude: coords.longitude,
-                    latitudeDelta: 0.00001,
-                    longitudeDelta: 0.00001
-                })
-            })
+            await requestLocationPermission()
+
+            subscription = await startLocationTracking(handleLocationUpdate)
 
         }
+
         startTracking()
 
-        return () => {
-            subscription?.remove()
-        }
-        // async function initLocation() {
-        //     try {
-        //         await requestLocationPermission()
-        //         const coords = await getCurrentLocation()
-        //         console.log('cords', coords)
-        //         setLocation(coords)
-        //         mapRef.current?.animateToRegion({
-        //             latitude: coords.latitude,
-        //             longitude: coords.longitude,
-        //             latitudeDelta: 0.01,
-        //             longitudeDelta: 0.01
-        //         })
-        //     } catch (error) {
-        //         console.log('error')
-        //     }
-        // }
+        return () => subscription?.remove()
+
     }, [])
+
+
+    const handleLocationUpdate = (coords: any) => {
+        mapRef.current?.animateToRegion({
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            latitudeDelta: 0.001,
+            longitudeDelta: 0.001
+        })
+        setLocation(coords)
+
+        updateTrail(coords)
+        updateDistance(coords)
+        updateHexState(coords)
+
+        prevLocationRef.current = coords
+
+        if (!mapRef.current) return
+
+        if (!currentHexRef.current) {
+            mapRef.current.animateToRegion({
+                latitude: coords.latitude,
+                longitude: coords.longitude,
+                latitudeDelta: 0.001,
+                longitudeDelta: 0.001
+            })
+        }
+
+    }
+
+
+    const updateTrail = (coords: any) => {
+
+        setTrail(prev => [
+            ...prev,
+            {
+                latitude: coords.latitude,
+                longitude: coords.longitude
+            }
+        ])
+
+    }
+
+
+    const updateDistance = (coords: any) => {
+
+        if (!prevLocationRef.current) return
+
+        const dist = distanceMeters(prevLocationRef.current, coords)
+
+        setDistance(prev => prev + dist)
+
+    }
+
+
+    const updateHexState = (coords: any) => {
+
+        const hex = getHexIndex(coords.latitude, coords.longitude)
+
+        if (hex === currentHexRef.current) return
+
+        console.log("Entered new hex:", hex)
+
+        currentHexRef.current = hex
+
+        setCurrentHex(hex)
+        setTimeInHex(0)
+
+        setVisitedHexes(prev => {
+            const updated = new Set(prev)
+            updated.add(hex)
+            return updated
+        })
+
+        const neighbours = getNeighbours(hex)
+
+        setHexes(neighbours)
+
+    }
+
+
+    useEffect(() => {
+
+        const interval = setInterval(() => {
+            setTimeInHex(prev => prev + 1)
+        }, 1000)
+
+        return () => clearInterval(interval)
+
+    }, [currentHex])
+
     return (
         <View style={styles.container}>
+
             <View style={styles.hud}>
-                <PlayerHUD />
+                <PlayerHUD
+                    currentHex={currentHex}
+                    distance={distance}
+                    timeInHex={timeInHex}
+                    visitedCount={visitedHexes.size}
+                />
             </View>
-            {/* <MapView style={styles.map}
-                showsUserLocation
-                // showsMyLocationButton
-                ref={mapRef}
-            // initialRegion={{
-            //     latitude: location?.latitude || 28.6139,
-            //     longitude: location?.longitude || 77.2090,
-            //     latitudeDelta: 0.01,
-            //     longitudeDelta: 0.01
-            // }}
-            /> */}
+
             <MapView
                 ref={mapRef}
                 showsUserLocation
                 style={styles.map}
             >
 
-                {/* {location && (
-                    <Marker coordinate={{
-                        latitude: location.latitude,
-                        longitude: location.longitude
-                    }}
-                        title='You are here'
-                    />
-                )} */}
                 {hexes.map((hex) => {
 
                     const isPlayerHex = hex === currentHex
@@ -118,20 +174,24 @@ const MapScreen = () => {
                     )
 
                 })}
+
+                <Polyline
+                    coordinates={trail}
+                    strokeWidth={4}
+                    strokeColor="#2196F3"
+                />
+
             </MapView>
 
-
         </View>
-
     )
 }
 
 export default MapScreen
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1
-    },
+
+    container: { flex: 1 },
 
     hud: {
         position: "absolute",
@@ -140,7 +200,6 @@ const styles = StyleSheet.create({
         zIndex: 10
     },
 
-    map: {
-        flex: 1
-    }
-});
+    map: { flex: 1 }
+
+})

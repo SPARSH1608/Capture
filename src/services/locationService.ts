@@ -20,7 +20,7 @@ export async function startLocationTracking(callback: (coords: any) => void) {
         {
             accuracy: Location.Accuracy.High,
             timeInterval: 3000,
-            distanceInterval: 1
+            distanceInterval: 3
         },
         (location) => {
             callback(location.coords)

@@ -1,23 +1,54 @@
-import React from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import React from "react"
+import { StyleSheet, Text, View } from "react-native"
 
-const PlayerHUD = () => {
+type Props = {
+    currentHex: string | null
+    distance: number
+    timeInHex: number
+    visitedCount: number
+}
+
+export default function PlayerHUD({
+    currentHex,
+    distance,
+    timeInHex,
+    visitedCount
+}: Props) {
+
     return (
         <View style={styles.container}>
-            <Text>Level. 1</Text>
-            <Text>XP:200</Text>
-            <Text>Hexes :3</Text>
+
+            <Text style={styles.text}>
+                Hex: {currentHex?.slice(0, 8) || "Loading"}
+            </Text>
+
+            <Text style={styles.text}>
+                Distance: {distance.toFixed(1)} m
+            </Text>
+
+            <Text style={styles.text}>
+                Time: {timeInHex}s
+            </Text>
+
+            <Text style={styles.text}>
+                Visited: {visitedCount}
+            </Text>
 
         </View>
     )
 }
 
-export default PlayerHUD
-
 const styles = StyleSheet.create({
     container: {
-        flexDirection: "row",
-        justifyContent: "space-around",
-        padding: 10
+        backgroundColor: "rgba(0,0,0,0.6)",
+        padding: 12,
+        borderRadius: 10,
+        marginHorizontal: 20
+    },
+
+    text: {
+        color: "white",
+        fontSize: 14,
+        marginBottom: 4
     }
-});
+})
