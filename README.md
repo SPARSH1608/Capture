@@ -1,413 +1,355 @@
 # Territory Game (React Native + H3)
 
-A real-world multiplayer territory capture game inspired by **Strava heatmaps, Pokémon Go, and Ingress**, where players **walk in the real world to capture hexagonal regions** on a map.
+This project is a real-world, location-based territory game where players move physically and capture regions on a map. The map is divided into hexagonal cells using H3 indexing, and each cell behaves like a small unit of territory that can be captured, owned, and eventually lost over time.
 
-This project is being built step-by-step using **React Native (Expo) + TypeScript + H3 geospatial indexing**.
-
-The current version implements:
-
-* Real-time GPS tracking
-* Player marker on map
-* H3 hex indexing
-* Dynamic hex grid around the player
-
-Future updates will add **territory ownership, multiplayer battles, clans, and progression systems**.
+The goal of the system so far has been to build a **strong core engine** before adding multiplayer or backend complexity. Everything implemented until now runs locally on the device but follows patterns that can scale later.
 
 ---
 
-# Tech Stack
+# What the Project Does Right Now
 
-Frontend
+At its current stage, the application already behaves like a simple single-player territory system. It continuously tracks the user’s real-world movement and maps it into a structured grid.
 
-* React Native
-* Expo
-* TypeScript
-* React Native Maps
+The system currently supports:
 
-Geospatial System
-
-* Uber H3 (`h3-js`)
-
-Location
-
-* Expo Location API
-
-Architecture
-
-* Modular service-based architecture
-
-```
-GPS → H3 Index → Hex Grid → Map Rendering
-```
+* tracking the player’s GPS location in real time
+* converting GPS coordinates into H3 hex indexes
+* rendering a grid of hexagons around the player
+* tracking how the player moves (trail, distance, time)
+* calculating capture progress inside a hex
+* assigning ownership to hexes when fully captured
+* maintaining ownership for a fixed duration
+* gradually reducing ownership over time (decay)
+* displaying all of this data in the UI
 
 ---
 
-# Project Structure
+# Core System Overview
 
-```
-app
- └ index.tsx
+The application is built as a pipeline where each layer transforms raw data into more meaningful game state.
 
-src
- ├ components
- │   └ PlayerHUD.tsx
- │
- ├ screens
- │   └ MapScreen.tsx
- │
- ├ services
- │   ├ locationService.ts
- │   └ h3Service.ts
- │
- ├ hooks
- ├ store
- ├ types
- └ utils
-
-learning
- └ exercises
+```text
+GPS → Movement → Hex Mapping → Capture Logic → Territory State → UI
 ```
 
-**Important**
-
-`src/` contains production game code.
-`learning/` contains practice experiments and exercises.
+Each step has a clear responsibility.
 
 ---
 
-# Setup Instructions
+# 1. Location Tracking
 
-## 1 Install dependencies
+The app uses the Expo Location API to continuously receive the user’s position.
 
-```
-npm install
-```
+* The function `watchPositionAsync` subscribes to location updates
+* Updates are triggered based on time and distance thresholds
+* Each update gives a coordinate: latitude and longitude
 
-Install map library
-
-```
-npx expo install react-native-maps
-```
-
-Install location services
-
-```
-npx expo install expo-location
-```
-
-Install H3 geospatial library
-
-```
-npm install h3-js
-```
-
-Start the development server
-
-```
-npx expo start
-```
+This is the raw input of the system. Everything else builds on top of it.
 
 ---
 
-# Core Systems Implemented
+# 2. Movement Tracking
 
-## 1 Map Rendering
+Once we receive coordinates, we do not use them directly. Instead, we build a movement model.
 
-The app renders a native map using **react-native-maps**.
+There are three parts here:
 
-```
-<MapView />
-```
+### Path Trail
 
-The map fills the entire screen and serves as the main gameplay layer.
+* We store every coordinate in an array
+* This array represents the player’s path over time
+* It is rendered as a polyline on the map
 
-The player HUD floats above the map using absolute positioning.
+What it does:
 
----
-
-## 2 Real-Time GPS Tracking
-
-Location tracking uses the Expo Location API.
-
-```
-watchPositionAsync()
-```
-
-The system listens for location updates and updates the player's position in real time.
-
-Configuration:
-
-* High accuracy GPS
-* Updates every few seconds
-* Movement threshold to prevent excessive updates
-
-Pipeline:
-
-```
-Phone GPS
-↓
-Expo Location
-↓
-Location Service
-↓
-React State
-↓
-Map Marker
-```
+* gives visual feedback of movement
+* becomes the base for distance calculation
+* can later be used for analytics or anti-cheat
 
 ---
 
-## 3 Player Marker
+### Distance Tracking
 
-The player's real location is rendered on the map.
+* We calculate distance between consecutive coordinates
+* This uses the Haversine formula (accounts for Earth’s curvature)
+* Each small movement adds to a running total
 
-```
-<MapView>
-   <Marker />
-</MapView>
-```
+What it does:
 
-The map camera follows the player using:
-
-```
-animateToRegion()
-```
+* measures actual movement
+* ensures gameplay is based on walking, not just presence
 
 ---
 
-# 4 H3 Geospatial Indexing
+### Time Tracking
 
-The world is divided into **hexagonal cells using Uber H3**.
+* A timer increments every second while the player stays in a hex
+* This is reset when entering a new hex
 
-Each GPS coordinate converts to a **hex index**.
+What it does:
 
-Example:
-
-```
-28.6139 , 77.2090
-↓
-8928308280fffff
-```
-
-Resolution used:
-
-```
-Resolution = 9
-```
-
-This produces hexes approximately **100–150 meters wide**, ideal for walking-based gameplay.
-
-Conversion function:
-
-```
-latLngToCell(latitude, longitude, resolution)
-```
+* allows slow progress even without movement
+* balances gameplay between active and passive players
 
 ---
 
-# 5 Hex Grid Generation
+# 3. H3 Hex System
 
-Once the player hex is determined, surrounding hexes are generated using:
+Instead of using raw coordinates, we convert the world into discrete cells.
 
-```
-gridDisk()
-```
+* `latLngToCell` converts GPS → hex index
+* `gridDisk` generates nearby hexes
+* `cellToBoundary` converts hex → polygon
 
-Example:
+We use resolution 9, which gives hexes roughly 100–150 meters wide.
 
-```
-radius = 2
-```
+What this achieves:
 
-This produces **19 hexes around the player**.
-
-Grid layout:
-
-```
-⬡ ⬡ ⬡
-⬡ 🧍 ⬡
-⬡ ⬡ ⬡
-```
+* converts continuous space into manageable units
+* allows us to define “territory”
+* simplifies spatial logic
 
 ---
 
-# 6 Rendering Hexagons
+# 4. Hex Entry Detection
 
-Each hex index is converted to map coordinates using:
+This condition is central:
 
-```
-cellToBoundary()
-```
-
-This returns the 6 corner points of the hexagon.
-
-These coordinates are rendered on the map using:
-
-```
-<MapView.Polygon />
+```ts
+if (newHex !== currentHex)
 ```
 
-Example:
+What it means:
 
-```
-hex index
-↓
-6 coordinates
-↓
-polygon overlay
-```
+* the player has crossed a boundary
+* the game should react
+
+When this happens:
+
+* time is reset
+* distance is reset
+* capture starts again
+* grid is recalculated
+
+This is effectively the **event trigger of the game engine**.
 
 ---
 
-# Gameplay Model (Planned)
+# 5. Capture System
 
-The long-term gameplay loop:
+Capture is how a player takes control of a hex.
 
-```
-player walks
-↓
-GPS updates
-↓
-convert to H3 hex
-↓
-detect hex change
-↓
-start territory capture
-↓
-update ownership
-↓
-sync with server
+We combine movement signals into a score:
+
+* distance contributes 70%
+* time contributes 30%
+
+```text
+captureScore = distance * 0.7 + time * 0.3
 ```
 
-Ownership example:
+Then we convert it into percentage:
 
-```
-Player A: 60%
-Player B: 40%
+```text
+capturePercent = min(100, score / 100)
 ```
 
-When a player crosses **50% ownership**, the hex becomes theirs.
+What this does:
+
+* rewards movement more than inactivity
+* still allows progress when stationary
+* creates a smooth progression system
 
 ---
 
-# Current Features
+# 6. Territory State
 
-Implemented:
+Once a hex is captured, we store it as a structured object.
 
-* Map rendering
-* Player GPS tracking
-* Player marker
-* H3 hex indexing
-* Dynamic hex grid rendering
+Instead of just storing hex IDs, we store:
 
-Not implemented yet:
-
-* Territory capture logic
-* Multiplayer synchronization
-* Leaderboards
-* Teams or clans
-* Anti-cheat systems
-
----
-
-# Next Development Milestones
-
-## Hex Detection
-
-Detect when the player **enters a new hex cell**.
-
-```
-previousHex !== currentHex
+```ts
+type Territory = {
+  owner: "player" | "neutral"
+  capturePercent: number
+  capturedAt: number
+}
 ```
 
-Trigger capture logic.
+All territories are stored in:
 
----
-
-## Territory Capture
-
-Players capture hexes by walking inside them.
-
-Example:
-
-```
-distance walked inside hex
-↓
-capture percentage increases
+```ts
+Record<string, Territory>
 ```
 
+What this enables:
+
+* tracking ownership
+* tracking strength of control
+* enabling time-based systems
+
 ---
 
-## Multiplayer Territory System
+# 7. Ownership Logic
 
-Hex ownership stored on a server.
+When capture reaches 100%:
 
+* the hex becomes owned by the player
+* capturePercent is set to 100
+* capturedAt stores the timestamp
+
+This converts temporary progress into persistent game state.
+
+---
+
+# 8. Lock Period (Safe Ownership)
+
+After a hex is captured, it enters a protected state.
+
+* duration: 24 hours
+* no decay happens during this period
+
+This is checked using:
+
+```text
+currentTime - capturedAt < lockDuration
 ```
-player → server → map update
-```
 
-Possible ownership states:
+What this achieves:
 
-```
-Neutral
-Owned by player
-Owned by enemy
-```
+* gives players a sense of reward
+* prevents immediate loss
+* creates a stable ownership window
 
 ---
 
-## Real-Time Updates
+# 9. Decay System
 
-Using sockets or streaming APIs to update territory state instantly.
+After the lock period expires:
 
----
+* capturePercent starts decreasing gradually
+* this runs on a timer (every few seconds)
 
-## Anti-Cheat System
+If capturePercent reaches 0:
 
-Prevent GPS spoofing using:
+* the hex is removed from state
+* it becomes neutral again
 
-* speed limits
-* movement validation
-* sensor fusion
+Important detail:
 
----
+* removing the hex from state means neutral
+* we do not store neutral explicitly
 
-# Future Features
+What this achieves:
 
-* Player leveling
-* Skill trees
-* Clan systems
-* Territory wars
-* Seasonal map resets
-* Event zones
-* Resource generation from owned hexes
+* keeps the map dynamic
+* encourages players to revisit areas
+* prevents permanent dominance
 
 ---
 
-# Inspiration
+# 10. Rendering System
 
-Games and systems that inspired this project:
+The map reflects the state of each hex.
 
-* Pokémon Go
-* Ingress
-* Strava Heatmaps
-* Uber H3 geospatial system
+Each hex is rendered as a polygon.
 
----
+The color depends on its state:
 
-# Development Philosophy
+* current hex → blue
+* owned hex → green (intensity based on strength)
+* visited hex → yellow
+* neutral hex → light gray
 
-The project focuses on:
+The opacity of owned hexes is tied to capturePercent:
 
-* clean architecture
-* scalable systems
-* real-world geospatial computation
-* multiplayer territory mechanics
+* higher percent → stronger color
+* lower percent → faded color
 
-The goal is to build a **production-quality geospatial game engine** step by step.
+This gives a visual representation of decay.
 
 ---
 
-# Author
+# 11. HUD System
 
-Sparsh Goel
+The HUD displays real-time information to the player.
+
+It receives data from MapScreen via props.
+
+Displayed values include:
+
+* current hex
+* distance walked
+* time spent in hex
+* capture percentage
+* visited hex count
+
+Important design principle:
+
+* HUD does not compute anything
+* it only displays state
+
+---
+
+# Key Design Decisions
+
+The system is designed around a few core ideas:
+
+* use discrete hexes instead of raw coordinates
+* separate movement tracking from game logic
+* avoid mutating state directly (immutability)
+* represent absence of data as neutral state
+* use time-based systems for dynamic gameplay
+
+---
+
+# What Has Been Achieved
+
+At this stage, the project includes:
+
+* a real-time movement engine
+* a spatial grid system
+* a capture mechanism
+* a territory ownership model
+* a decay system
+
+This is essentially the core of a location-based strategy game.
+
+---
+
+# What Comes Next
+
+The next major system is player vs player interaction.
+
+The idea is:
+
+* a player enters a hex owned by someone else
+* their movement reduces the current owner’s control
+* at the same time, their own control increases
+* ownership flips when control reaches a threshold
+
+This introduces:
+
+* competition
+* strategy
+* real multiplayer gameplay
+
+---
+
+# Summary
+
+The project has moved from:
+
+* displaying a map
+
+to:
+
+* building a structured, state-driven game world
+
+The current system is already capable of:
+
+* mapping real-world movement into territory control
+* evolving territory over time
+* representing game state visually
+
+The next step is to introduce **conflict between players**, which will turn this into a complete game loop.

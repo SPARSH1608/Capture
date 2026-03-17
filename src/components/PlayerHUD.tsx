@@ -6,13 +6,15 @@ type Props = {
     distance: number
     timeInHex: number
     visitedCount: number
+    capturePercent: number
 }
 
 export default function PlayerHUD({
     currentHex,
     distance,
     timeInHex,
-    visitedCount
+    visitedCount,
+    capturePercent,
 }: Props) {
 
     return (
@@ -33,8 +35,9 @@ export default function PlayerHUD({
             <Text style={styles.text}>
                 Visited: {visitedCount}
             </Text>
-
+            <Text style={styles.text}>Capture: {capturePercent.toFixed(0)}%</Text>
         </View>
+
     )
 }
 

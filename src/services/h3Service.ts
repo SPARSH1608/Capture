@@ -11,7 +11,7 @@ export function getNeighbours(hexIndex: string) {
 }
 export function getHexBoundary(hexIndex: string) {
     const boundary = h3.cellToBoundary(hexIndex)
-    console.log('boundar', boundary)
+    // console.log('boundar', boundary)
     return boundary.map(([lat, lng]) => ({
         latitude: lat,
         longitude: lng
